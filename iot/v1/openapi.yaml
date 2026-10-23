@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: Gumpalan IoT Service API
+  description: Layanan orkestrasi perangkat IoT berbasis kapabilitas mandiri.
+  version: 1.0.0
+servers:
+  - url: /iot/v1
+    description: Nginx reverse proxy endpoint
+
+paths:
+  /devices:
+    get:
+      summary: Ambil daftar seluruh perangkat IoT dan kapabilitasnya
+      operationId: listDevices
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Daftar perangkat.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Device'
+        '401':
+          description: Tidak terautentikasi.
+
+  /devices/{id}:
+    get:
+      summary: Ambil detail perangkat beserta status kapabilitas terkini
+      operationId: getDevice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detail perangkat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '404':
+          description: Perangkat tidak ditemukan.
+
+  /devices/{id}/command:
+    post:
+      summary: Kirim perintah ke kapabilitas perangkat
+      operationId: sendCommand
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandRequest'
+      responses:
+        '200':
+          description: Perintah berhasil diterjemahkan dan diteruskan ke broker MQTT.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Kapabilitas tidak didukung oleh perangkat ini.
+        '404':
+          description: Perangkat tidak ditemukan.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Capability:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: Jenis kapabilitas standar (switch, dimmer, sensor, dll.)
+          example: "switch"
+        state:
+          description: Nilai state terkini (on/off, angka dimmer, nilai sensor)
+          example: "on"
+        value:
+          type: number
+          nullable: true
+          example: 60
+
+    Device:
+      type: object
+      required:
+        - id
+        - name
+        - capabilities
+      properties:
+        id:
+          type: string
+          example: "lampu-tidur"
+        name:
+          type: string
+          example: "Lampu Tidur"
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+
+    CommandRequest:
+      type: object
+      required:
+        - capability
+        - value
+      properties:
+        capability:
+          type: string
+          example: "switch"
+        value:
+          description: Nilai perintah yang dikirimkan (string, number, boolean)
+          example: "toggle"

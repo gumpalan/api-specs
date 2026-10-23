@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: Gumpalan Auth Service API
+  description: Layanan pendaftaran perangkat, autentikasi, dan verifikasi token.
+  version: 1.0.0
+servers:
+  - url: /auth/v1
+    description: Nginx reverse proxy endpoint
+
+paths:
+  /register:
+    post:
+      summary: Pendaftaran perangkat baru
+      description: Perangkat mengirim kunci publik untuk meminta persetujuan.
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '202':
+          description: Pendaftaran diterima dan menunggu persetujuan admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Payload tidak valid.
+
+  /register/{deviceId}/status:
+    get:
+      summary: Periksa status pendaftaran perangkat
+      operationId: getRegistrationStatus
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status perangkat saat ini.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceStatusResponse'
+        '404':
+          description: Perangkat tidak ditemukan.
+
+  /modules:
+    get:
+      summary: Ambil daftar modul yang diaktifkan untuk perangkat ini
+      operationId: getEnabledModules
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Daftar modul yang diizinkan diakses.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modules:
+                    type: array
+                    items:
+                      type: string
+                    example: ["iot"]
+        '401':
+          description: Token tidak valid atau perangkat belum disetujui.
+
+  /verify:
+    get:
+      summary: Verifikasi token internal untuk Nginx auth_request
+      description: Dipanggil Nginx sebelum meneruskan request ke service downstream.
+      operationId: verifyToken
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token valid. Header X-Device-Id diteruskan ke upstream.
+          headers:
+            X-Device-Id:
+              schema:
+                type: string
+              description: ID unik perangkat terautentikasi.
+        '401':
+          description: Token tidak valid atau kadaluarsa.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - publicKey
+      properties:
+        name:
+          type: string
+          example: "Pixel 8 Pro"
+        publicKey:
+          type: string
+          example: "-----BEGIN PUBLIC KEY-----\nMIIB...IDAQAB\n-----END PUBLIC KEY-----"
+
+    RegisterResponse:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          example: "dev_01j7abc123"
+        status:
+          type: string
+          enum: [pending, approved, revoked]
+          example: "pending"
+
+    DeviceStatusResponse:
+      type: object
+      properties:
+        deviceId:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, revoked]
+        token:
+          type: string
+          nullable: true
+          description: Diisi token akses jika status telah approved.
